@@ -1,6 +1,6 @@
 # Showcase
 
-Transcend Hackathon Showcase workspace for @belli-us (DevPost: compilingcaffeine). Visit the [onboarding issue](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/work_items/1) to get started.
+Transcend Hackathon Showcase workspace for @CompilingCaffeine (DevPost: compilingcaffeine). Visit the [onboarding issue](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/work_items/1) to get started.
 
 ## Getting started
 
