@@ -16,8 +16,14 @@ workflow:
       when: never
     - if: $CI_COMMIT_BRANCH
 
+include:
+  # GitLab security scanners: IaC misconfigurations (KICS) and leaked secrets.
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
 stages:
   - validate
+  - secure
   - plan
   - apply
   - verify
@@ -93,6 +99,16 @@ test:
   cache: []
   script:
     - tests/run_tests.sh
+
+# ---------- secure ----------
+
+kics-iac-sast:
+  stage: secure
+  rules: !reference [.normal-rules, rules]
+
+secret_detection:
+  stage: secure
+  rules: !reference [.normal-rules, rules]
 
 # ---------- plan ----------
 
