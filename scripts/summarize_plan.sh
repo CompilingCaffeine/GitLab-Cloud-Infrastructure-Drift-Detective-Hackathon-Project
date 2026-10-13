@@ -18,7 +18,11 @@ jq '
     if ($mask | type) == "object" or ($mask | type) == "array"
     then ([$p[:range(0; ($p | length) + 1)]] | any(. as $q | ($mask | try getpath($q) catch null) == true))
     else $mask == true end;
-  def shown($v; $mask; $p): if masked($mask; $p) then "(sensitive)" else ($v | getpath($p)) end;
+  # Reports are posted to public issues: never echo the email of a person (service accounts are fine).
+  def redact_people:
+    if type == "string" and test("[^@\\s]+@[^@\\s]+\\.[a-z]+"; "i") and (test("gserviceaccount\\.com") | not)
+    then "(redacted user)" else . end;
+  def shown($v; $mask; $p): if masked($mask; $p) then "(sensitive)" else ($v | getpath($p) | redact_people) end;
 
   # Providers often read back unset values as {} or [] where state has null: not a real change.
   def norm: if . == {} or . == [] then null else . end;
@@ -44,13 +48,21 @@ jq '
       differences: (.change | leafdiff)
     };
 
-  {
+  [ .resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"]) | entry ] as $planned
+  # Attributes the declared configuration would change, per resource.
+  | ($planned | map({key: .address, value: [.differences[].attribute]}) | from_entries) as $managed
+  | {
     generated_at: (now | todate),
     pipeline_url: env.CI_PIPELINE_URL,
     job_url: env.CI_JOB_URL,
     commit_sha: env.CI_COMMIT_SHA,
-    drift: [ .resource_drift[]? | entry | select((.differences | length) > 0 or (.actions | index("delete"))) ],
-    planned_changes: [ .resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"]) | entry ]
+    # Out-of-band changes that matter: those the declared config would revert, or deleted resources.
+    # Server-managed bookkeeping (etag, revisions, last_modifier, timestamps) is dropped.
+    drift: [ .resource_drift[]? | entry
+      | if (.actions | index("delete")) then .differences = []
+        else .address as $addr | .differences |= map(select(.attribute as $a | ($managed[$addr] // []) | index($a))) end
+      | select((.differences | length) > 0 or (.actions | index("delete"))) ],
+    planned_changes: $planned
   }
   # drift: someone changed real infrastructure outside OpenTofu.
   # pending: the declared config differs from reality (drift to revert, or unapplied code).

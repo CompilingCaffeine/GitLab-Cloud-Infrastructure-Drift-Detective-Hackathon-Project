@@ -32,6 +32,10 @@ variables:
   # gitlab-tofu wrapper: GitLab-managed state named "demo", config in terraform/.
   GITLAB_TOFU_ROOT_DIR: ${CI_PROJECT_DIR}/terraform
   GITLAB_TOFU_STATE_NAME: demo
+  # Plans skip the state lock (-lock=false): pipelines started by the Duo flow's service account
+  # (Developer role) may read but not lock state. Plans never write state; apply still locks,
+  # and resource_group serializes every job that touches the demo state.
+  GITLAB_TOFU_ALLOW_DEVELOPER_ROLE: "true"
   # Full JSON plans can contain secrets: they stay in the job's temp dir, never in artifacts.
   FULL_PLAN: /tmp/full-plan.json
   DRIFT_FLOW_NAME: drift-detective-investigator

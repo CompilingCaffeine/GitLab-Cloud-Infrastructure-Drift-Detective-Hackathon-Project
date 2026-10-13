@@ -81,6 +81,28 @@ noise_plan=$(variant noise '
 [ "$(jq -r '[.drift_detected, (.drift | length)] | map(tostring) | join(",")' "$work/out-noise/drift-report.json")" = "false,0" ] \
   && pass "summary: null vs empty read-back is not drift" || fail "summary: null/empty noise reported as drift"
 
+# Seen on a real gcloud change: the managed attribute changes alongside server bookkeeping and the
+# email of the person who made it. Only the managed attribute is drift; no email may be published.
+real_plan=$(variant real-gcloud '
+  .resource_drift = [{
+    address: "google_cloud_run_v2_service.web", type: "google_cloud_run_v2_service", name: "web",
+    change: {actions: ["update"],
+      before: {etag: "\"a\"", generation: "1", last_modifier: "drift-apply@p.iam.gserviceaccount.com", template: [{scaling: [{max_instance_count: 2}]}]},
+      after:  {etag: "\"b\"", generation: "2", last_modifier: "someone@example.com", template: [{scaling: [{max_instance_count: 4}]}]}}
+  }]
+  | .resource_changes = [{
+    address: "google_cloud_run_v2_service.web", type: "google_cloud_run_v2_service", name: "web",
+    change: {actions: ["update"],
+      before: {last_modifier: "someone@example.com", template: [{scaling: [{max_instance_count: 4}]}]},
+      after:  {last_modifier: "someone@example.com", template: [{scaling: [{max_instance_count: 2}]}]}}
+  }]')
+"$root/scripts/summarize_plan.sh" "$real_plan" "$work/out-real" > /dev/null
+[ "$(jq -r '.drift[0].differences | map(.attribute) | join(",")' "$work/out-real/drift-report.json")" = "template.0.scaling.0.max_instance_count" ] \
+  && pass "summary: drift limited to attributes the config manages" || fail "summary: bookkeeping reported as drift"
+if grep -q "someone@example.com" "$work/out-real/drift-report.json" "$work/out-real/drift-report.md"; then
+  fail "summary: personal email published"
+else pass "summary: personal emails never published"; fi
+
 echo '{}' > "$work/empty.json"
 "$root/scripts/summarize_plan.sh" "$work/empty.json" "$work/out-empty" > /dev/null
 [ "$(jq -r '[.drift_detected, .changes_pending] | join(",")' "$work/out-empty/drift-report.json")" = "false,false" ] \
