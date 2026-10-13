@@ -41,3 +41,9 @@ gl --request PUT "${api}/projects/${project}/issues/${iid}" \
   --data-urlencode "state_event=close" \
   --data-urlencode "add_labels=drift::resolved" > /dev/null
 echo "Closed drift issue #${iid}."
+
+# Send the incident's trace to GitLab Observability. Telemetry must never fail verification.
+if [ -n "${OTEL_EXPORTER_OTLP_ENDPOINT:-}" ]; then
+  GITLAB_AUTH_HEADER="$auth" scripts/incident_trace.sh "$iid" \
+    || echo "WARNING: could not send the incident trace for #${iid}." >&2
+fi
