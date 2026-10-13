@@ -1,5 +1,6 @@
 # Drift Detective: GitLab Duo custom flow (published by scripts/publish_flow.sh).
-# Started by CI (scripts/start_drift_flow.sh) with a goal naming the drift issue and detect-drift job.
+# Started by CI (scripts/start_drift_flow.sh) with a goal naming the drift issue and detect-drift job,
+# or by a human replying "@<flow service account> decision: revert|adopt" on an escalated issue.
 #
 #   investigator --"revert"/"adopt"--> remediator --> end
 #                --anything else-----> end           (escalated: comment only, no MR)
@@ -69,13 +70,15 @@ prompts:
       user: |
         Project ID: {{project_id}}
 
-        Assignment from CI:
+        Assignment (from CI, or a human mentioning you on the drift issue):
         {{goal}}
 
         Do this:
         1. Read skills/drift-investigation/SKILL.md.
         2. Read the drift issue named in the assignment.
-        3. Read the detect-drift job log named in the assignment with get_job_logs, and compare it with the issue evidence.
+        3. Read the detect-drift job log (its ID is in the assignment or the issue) with get_job_logs, and compare it
+           with the issue evidence. If a human has replied with "decision: revert" or "decision: adopt", apply the
+           skill's human-decision rule.
         4. Read the relevant declared configuration under terraform/.
         5. Post exactly ONE comment on the drift issue using the report format from the skill.
         6. Then finish. Your final answer must be exactly one lowercase word and nothing else:
@@ -96,7 +99,7 @@ prompts:
         Project ID: {{project_id}}
         Investigator decision: {{decision}}
 
-        Assignment from CI:
+        Assignment (from CI, or a human mentioning you on the drift issue):
         {{goal}}
 
         Do this:

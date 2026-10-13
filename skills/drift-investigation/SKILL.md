@@ -9,6 +9,12 @@ The declared OpenTofu configuration in `terraform/` on the default branch is the
 A drift issue is opened by CI. It contains a redacted drift report (Markdown and JSON) and the ID of
 the `detect-drift` job that produced it.
 
+You are started in one of two ways:
+- by CI, with an assignment naming the issue and the `detect-drift` job, or
+- by a human mentioning you on the issue. The assignment then looks like
+  `Input: <their comment> Context: {Issue IID: <n>}`. Read that issue, and take the job ID from the
+  issue description (or from the newest "Drift still present" comment, if there is one).
+
 ## 1. Establish facts (never skip)
 
 1. Read the issue. Extract the `detect-drift` job ID and the JSON evidence block.
@@ -35,8 +41,16 @@ reverting a capacity increase during a traffic spike can cause an outage.
 
 ## 3. Decide
 
-Choose exactly one decision. Check the escalate conditions **first**: if any of them holds, the
-decision is escalate, whatever the risk level.
+Choose exactly one decision.
+
+**Human decision first.** If a human (an author whose username does not start with `ai-`) has
+commented on the drift issue with `decision: revert` or `decision: adopt`, and that comment is newer
+than the latest "Drift investigation" comment, that is the decision. Name the human, confirm the job log
+still shows the drift, and follow it, with one exception: never adopt a live value that breaks a guardrail.
+In that case, explain why and escalate again.
+
+Otherwise, check the escalate conditions **first**: if any of them holds, the decision is escalate,
+whatever the risk level.
 
 - **escalate**: open no merge request; ask a human to decide. Use it when:
   - evidence is missing or contradictory,
@@ -54,7 +68,9 @@ decision is escalate, whatever the risk level.
   - reverting would plausibly reduce availability or capacity.
 
 When you escalate, the "Proposed correction" section must lay out both options (revert and adopt),
-what each would change, and what the human should check before choosing.
+what each would change, and what the human should check before choosing. End the "Approval required"
+section with the exact reply that resumes the workflow:
+`@ai-drift-detective-investigator-gitlab-ai-hackathon decision: revert` (or `decision: adopt`).
 
 ## Guardrails (also enforced by `scripts/policy_check.sh` in CI)
 
