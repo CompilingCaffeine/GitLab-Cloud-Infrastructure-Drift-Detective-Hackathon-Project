@@ -20,12 +20,15 @@ jq '
     else $mask == true end;
   def shown($v; $mask; $p): if masked($mask; $p) then "(sensitive)" else ($v | getpath($p)) end;
 
+  # Providers often read back unset values as {} or [] where state has null: not a real change.
+  def norm: if . == {} or . == [] then null else . end;
+
   def leafdiff:
     (.before // {}) as $b | (.after // {}) as $a
     | (.before_sensitive // false) as $bs | (.after_sensitive // false) as $as
     | [ ($b, $a) | paths(type != "object" and type != "array") ]
     | unique
-    | map(. as $p | select(($b | getpath($p)) != ($a | getpath($p))))
+    | map(. as $p | select(($b | getpath($p) | norm) != ($a | getpath($p) | norm)))
     | map(. as $p | {
         attribute: ($p | map(tostring) | join(".")),
         before: shown($b; $bs; $p),
@@ -46,7 +49,7 @@ jq '
     pipeline_url: env.CI_PIPELINE_URL,
     job_url: env.CI_JOB_URL,
     commit_sha: env.CI_COMMIT_SHA,
-    drift: [ .resource_drift[]? | entry ],
+    drift: [ .resource_drift[]? | entry | select((.differences | length) > 0 or (.actions | index("delete"))) ],
     planned_changes: [ .resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"]) | entry ]
   }
   # drift: someone changed real infrastructure outside OpenTofu.

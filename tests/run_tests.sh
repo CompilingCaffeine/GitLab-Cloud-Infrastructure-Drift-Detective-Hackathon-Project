@@ -68,6 +68,19 @@ r="$work/out-create/drift-report.json"
 [ "$(jq -r '[.drift_detected, .changes_pending] | join(",")' "$r")" = "false,true" ] \
   && pass "summary: first deploy is pending changes, not drift" || fail "summary: create misclassified"
 
+# Seen on real Cloud Run plans: state has null, the API returns {} or []. That is not drift.
+noise_plan=$(variant noise '
+  .resource_drift = [{
+    address: "google_cloud_run_v2_service.web", type: "google_cloud_run_v2_service", name: "web",
+    change: {actions: ["update"],
+      before: {annotations: null, custom_audiences: null, template: [{labels: null, containers: [{args: null}]}]},
+      after:  {annotations: {},   custom_audiences: [],   template: [{labels: {},   containers: [{args: []}]}]}}
+  }]
+  | .resource_changes = []')
+"$root/scripts/summarize_plan.sh" "$noise_plan" "$work/out-noise" > /dev/null
+[ "$(jq -r '[.drift_detected, (.drift | length)] | map(tostring) | join(",")' "$work/out-noise/drift-report.json")" = "false,0" ] \
+  && pass "summary: null vs empty read-back is not drift" || fail "summary: null/empty noise reported as drift"
+
 echo '{}' > "$work/empty.json"
 "$root/scripts/summarize_plan.sh" "$work/empty.json" "$work/out-empty" > /dev/null
 [ "$(jq -r '[.drift_detected, .changes_pending] | join(",")' "$work/out-empty/drift-report.json")" = "false,false" ] \
