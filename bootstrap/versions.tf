@@ -1,0 +1,17 @@
+# One-time bootstrap, applied locally by a project owner.
+# State stays local (gitignored): this stack only holds identities, never data.
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 8.5"
+    }
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}

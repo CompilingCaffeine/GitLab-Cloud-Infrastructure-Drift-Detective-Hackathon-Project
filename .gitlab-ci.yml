@@ -1,0 +1,188 @@
+# Cloud Infrastructure Drift Detective
+#
+# Pipelines:
+#   merge request  -> fmt, validate, plan (read-only identity), plan shown in the MR widget
+#   main branch    -> plan, then a MANUAL apply (write identity), then verify (no drift remains)
+#   drift check    -> scheduled (or run with DRIFT_CHECK=true): plan against the live
+#                     environment and publish redacted drift evidence
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Avoid duplicate branch pipelines while an MR is open.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - validate
+  - plan
+  - apply
+  - verify
+  - drift
+
+variables:
+  # Non-secret outputs of bootstrap/ (identities, not credentials).
+  GCP_WIF_PROVIDER: projects/860356597681/locations/global/workloadIdentityPools/gitlab-ci/providers/gitlab-com
+  GCP_PLAN_SA: drift-plan@drift-detective-2026.iam.gserviceaccount.com
+  GCP_APPLY_SA: drift-apply@drift-detective-2026.iam.gserviceaccount.com
+  # gitlab-tofu wrapper: GitLab-managed state named "demo", config in terraform/.
+  GITLAB_TOFU_ROOT_DIR: ${CI_PROJECT_DIR}/terraform
+  GITLAB_TOFU_STATE_NAME: demo
+  DRIFT_CHECK:
+    value: "false"
+    description: Set to "true" to run a drift check instead of the normal pipeline.
+
+default:
+  image: registry.gitlab.com/components/opentofu/gitlab-opentofu:4.9.0-opentofu1.12.6-alpine
+  interruptible: false
+  timeout: 15m
+  cache:
+    key: tofu-${GITLAB_TOFU_STATE_NAME}
+    paths:
+      - terraform/.terraform/
+
+.gcp:
+  id_tokens:
+    GCP_ID_TOKEN:
+      aud: https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase
+  before_script:
+    - . scripts/gcp-auth.sh
+
+.normal-rules:
+  rules:
+    - if: $DRIFT_CHECK == "true" || $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+.main-rules:
+  rules:
+    - if: $DRIFT_CHECK == "true" || $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------- validate ----------
+
+fmt:
+  stage: validate
+  extends: .normal-rules
+  cache: []
+  script:
+    - gitlab-tofu fmt
+
+validate:
+  stage: validate
+  extends: .normal-rules
+  script:
+    - gitlab-tofu validate
+
+# ---------- plan ----------
+
+plan:
+  stage: plan
+  extends: [.gcp, .normal-rules]
+  variables:
+    GCP_SA: $GCP_PLAN_SA
+  resource_group: tofu-demo
+  script:
+    - gitlab-tofu plan
+    - gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/plan.cache" | scripts/summarize_plan.sh /dev/stdin evidence
+  artifacts:
+    # The plan cache can embed secrets: keep it to project members only.
+    access: developer
+    expire_in: 7 days
+    paths:
+      - terraform/plan.cache
+      - evidence/
+    reports:
+      terraform: terraform/plan.json
+
+# ---------- apply (human gate) ----------
+
+apply:
+  stage: apply
+  extends: [.gcp, .main-rules]
+  variables:
+    GCP_SA: $GCP_APPLY_SA
+  needs: [plan]
+  resource_group: tofu-demo
+  environment:
+    name: demo
+    url: https://console.cloud.google.com/run?project=drift-detective-2026
+  rules:
+    - if: $DRIFT_CHECK == "true" || $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: false
+  script:
+    - gitlab-tofu apply
+    - gitlab-tofu output -json > outputs.json
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - outputs.json
+
+# ---------- verify ----------
+
+verify:
+  stage: verify
+  extends: [.gcp, .main-rules]
+  variables:
+    GCP_SA: $GCP_PLAN_SA
+    GITLAB_TOFU_USE_DETAILED_EXITCODE: "true"
+    GITLAB_TOFU_PLAN_NAME: verify
+  needs: [apply]
+  resource_group: tofu-demo
+  script:
+    - |
+      set +e
+      gitlab-tofu plan
+      code=$?
+      set -e
+      gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/verify.cache" | scripts/summarize_plan.sh /dev/stdin evidence
+      case "$code" in
+        0) echo "VERIFIED: live environment matches the declared configuration." ;;
+        2) echo "NOT VERIFIED: differences remain after apply." >&2; exit 1 ;;
+        *) echo "Plan failed (exit $code)." >&2; exit "$code" ;;
+      esac
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - evidence/
+
+# ---------- drift detection ----------
+
+detect-drift:
+  stage: drift
+  extends: .gcp
+  variables:
+    GCP_SA: $GCP_PLAN_SA
+    GITLAB_TOFU_USE_DETAILED_EXITCODE: "true"
+    GITLAB_TOFU_PLAN_NAME: drift
+  rules:
+    - if: ($DRIFT_CHECK == "true" || $CI_PIPELINE_SOURCE == "schedule") && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  resource_group: tofu-demo
+  script:
+    - |
+      set +e
+      gitlab-tofu plan
+      code=$?
+      set -e
+      case "$code" in
+        0) drift=false ;;
+        2) drift=true ;;
+        *) echo "Plan failed (exit $code); cannot determine drift." >&2; exit "$code" ;;
+      esac
+      gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/drift.cache" | scripts/summarize_plan.sh /dev/stdin evidence
+      echo "DRIFT_DETECTED=$drift" > drift.env
+      echo "Drift detected: $drift"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - evidence/
+    reports:
+      dotenv: drift.env
