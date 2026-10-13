@@ -35,18 +35,26 @@ reverting a capacity increase during a traffic spike can cause an outage.
 
 ## 3. Decide
 
-Choose exactly one decision.
+Choose exactly one decision. Check the escalate conditions **first**: if any of them holds, the
+decision is escalate, whatever the risk level.
 
-- **revert**: restore the declared configuration. Use it for every High-risk drift and for any drift
-  you cannot justify adopting. The code is already correct, so the merge request records the incident and
-  merging it lets the reviewed `apply` restore the declared state.
+- **escalate**: open no merge request; ask a human to decide. Use it when:
+  - evidence is missing or contradictory,
+  - the planned changes (what `apply` would do) contain `delete` or `replace`,
+  - the drift changes a runtime identity (a service's `service_account`): reverting it could break a
+    deliberate migration, and adopting it could legitimise lateral movement, so neither is safe to guess,
+  - the drift involves secrets you cannot see, or you are unsure.
+- **revert**: restore the declared configuration. Use it for every other High-risk drift (for example
+  authentication disabled or invoker members changed) and for any drift you cannot justify adopting.
+  The code is already correct, so the merge request records the incident and merging it lets the
+  reviewed `apply` restore the declared state.
 - **adopt**: codify the live value into `terraform/`. Use it only when **all** of these hold:
   - the risk is Low, or Medium with no security impact,
   - the live value satisfies every guardrail below,
   - reverting would plausibly reduce availability or capacity.
-- **escalate**: open no merge request; ask a human to decide. Use it when evidence is missing or
-  contradictory, when the plan contains `delete` or `replace`, when the drift touches identity or
-  secrets you cannot see, or when you are unsure.
+
+When you escalate, the "Proposed correction" section must lay out both options (revert and adopt),
+what each would change, and what the human should check before choosing.
 
 ## Guardrails (also enforced by `scripts/policy_check.sh` in CI)
 
