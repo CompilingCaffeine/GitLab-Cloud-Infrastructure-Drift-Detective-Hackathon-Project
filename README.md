@@ -47,7 +47,7 @@ flowchart TB
 
   subgraph S3["3 Approve: human"]
     direction LR
-    MRCI["MR pipeline<br/>fmt, validate, tests,<br/>plan, policy guardrails"] --> H1{{"review and merge"}}
+    MRCI["MR pipeline<br/>fmt, validate, tests, security scans,<br/>plan, policy guardrails"] --> H1{{"review and merge"}}
     H2{{"reply: decision revert / adopt"}}
   end
 
@@ -78,8 +78,9 @@ flowchart TB
    the flow with a comment and no merge request.
 5. **Propose.** The remediator opens one merge request from `duo/fix/drift-issue-N`. Revert MRs only add
    an incident record (the code is already right). Adopt MRs change only the drifted attributes.
-6. **Validate.** The MR pipeline runs `fmt`, `validate`, the test suite, and a plan with
-   [`scripts/policy_check.sh`](scripts/policy_check.sh). The guardrails hold even if the agent is wrong.
+6. **Validate.** The MR pipeline runs `fmt`, `validate`, the test suite, IaC and secret scanning behind a
+   security gate, and a plan with [`scripts/policy_check.sh`](scripts/policy_check.sh). The guardrails hold
+   even if the agent is wrong.
 7. **Approve and apply.** A human merges and clicks the manual `apply` job on `main`.
 8. **Verify and close.** `verify` re-plans and must see **no changes**. It then follows the merged MR's
    `Drift-Issue: #N` trailer, posts links to the evidence, and closes the issue.
@@ -121,6 +122,8 @@ Detection was triggered by hand right after each change. On the 6-hour schedule,
   agent's playbook, versioned and reviewed like code.
 - **CI/CD:** pipeline schedules, a manual job as the approval gate, environments, `resource_group`
   serialization, dotenv artifacts between jobs, the Terraform MR widget report, and **OIDC `id_tokens`**.
+- **Security scanning:** IaC SAST (KICS) and secret detection templates, made blocking by
+  [`scripts/security_gate.sh`](scripts/security_gate.sh), which fails on Critical or High findings.
 - **GitLab-managed OpenTofu state** and the official `gitlab-opentofu` image from the
   [OpenTofu CI/CD component](https://gitlab.com/components/opentofu).
 - **Issues and merge requests** as the audit trail: scoped labels (`drift::investigating` → `drift::resolved`),
@@ -166,13 +169,13 @@ instructions in [`SKILL.md`](skills/drift-investigation/SKILL.md), not technical
 ## Repository layout
 
 ```text
-.gitlab-ci.yml                  validate, plan, apply, verify, drift, investigate
+.gitlab-ci.yml                  validate, secure, plan, apply, verify, drift, investigate
 bootstrap/                      one-time: workload identity federation and service accounts
 terraform/                      the managed environment (two Cloud Run services and an IAM binding)
 flows/drift-investigator.yml    the Duo custom flow (investigator and remediator)
 skills/drift-investigation/     the agent's playbook
-scripts/                        GCP auth, evidence, policy, flow start, issue closing, flow publishing
-tests/                          tests for the evidence and policy scripts (real plan fixture)
+scripts/                        GCP auth, evidence, policy and security gates, flow start, issue closing, flow publishing
+tests/                          tests for the evidence, policy, and security gate scripts
 drift/incidents/                incident records committed by the agent's merge requests
 docs/                           measured evaluation, architecture diagram (PNG)
 ```
