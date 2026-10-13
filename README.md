@@ -128,21 +128,36 @@ Detection was triggered by hand right after each change. On the 6-hour schedule,
 
 ## Security model
 
+**Enforced by design.** These hold regardless of what the model does.
+
 - **No long-lived cloud keys.** CI exchanges its OIDC token for short-lived Google credentials
-  (workload identity federation, locked to this project path).
-- **Two identities.** `drift-plan` (`roles/run.viewer`) for detection and every plan. `drift-apply`
-  (`roles/run.admin`) can only be used by pipelines on `main`, and only through the manual `apply` job.
-- **The agent never touches the cloud.** The flow gets no cloud credentials. It reads GitLab, writes one
-  comment, and opens at most one merge request. It cannot merge, approve, or run pipelines.
+  (workload identity federation, which rejects tokens from any other GitLab project).
+- **Two identities.** `drift-plan` (`roles/run.viewer`) is used for detection and every plan.
+  `drift-apply` (`roles/run.admin`) can only be obtained by pipelines on `main`. In this pipeline,
+  only the manual `apply` job requests it.
+- **The agent cannot change cloud infrastructure.** The flow never receives cloud credentials, and it has
+  no tools to merge, approve, or run pipelines.
 - **Guardrails don't depend on the agent.** `policy_check.sh` fails any plan that breaks a guardrail,
   so an unsafe "adopt" cannot pass CI.
-- **Published evidence is redacted.** Sensitive values are masked and personal emails are removed
-  before anything reaches an issue. The raw JSON plan never becomes an artifact. The binary plan cache
-  that `apply` needs is an artifact, restricted to project members (`access: developer`).
+- **Published evidence is redacted.** A script masks sensitive values and removes personal emails before
+  anything reaches an issue. The raw JSON plan never becomes an artifact. The binary plan cache that
+  `apply` needs is an artifact, restricted to project members (`access: developer`).
+
+**Required by the playbook.** The agent followed these in every evaluation run, but they are
+instructions in [`SKILL.md`](skills/drift-investigation/SKILL.md), not technical controls.
+
+- Work only from tool output (the issue, the job log, the repository), and label every guess as a hypothesis.
+- Escalate on identity changes, delete or replace plans, contradictory evidence, or uncertainty.
+- Open at most one merge request per incident, touching only `terraform/` and `drift/incidents/`.
+- Act on a human's decision only when it uses the exact wording `decision: revert` or `decision: adopt`.
 
 **Known limits** (from the hackathon's Developer role, documented rather than hidden):
-- `main` is not protected against Developer pushes, so "main only" for the apply identity is weaker than
-  in a real setup. With Maintainer access, protect `main` and the `demo` environment, and require MR approval.
+- `main` is not protected against Developer pushes. Two consequences:
+  - "main only" for the apply identity is weaker than in a real setup.
+  - The flow's service account could technically commit directly to `main`. Nothing reaches the cloud
+    without a human running `apply`.
+
+  With Maintainer access, protect `main` and the `demo` environment, and require merge request approval.
 - The flow is started with a personal access token (`DUO_FLOW_TOKEN`, `api` scope) in a masked, unprotected
   CI variable. GitLab triggers ignore bot users, so a human token is needed to start flows from CI.
 - Plans run with `-lock=false`, because the flow's service account can read but not lock state. Apply
