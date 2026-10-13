@@ -84,6 +84,8 @@ flowchart TB
 7. **Approve and apply.** A human merges and clicks the manual `apply` job on `main`.
 8. **Verify and close.** `verify` re-plans and must see **no changes**. It then follows the merged MR's
    `Drift-Issue: #N` trailer, posts links to the evidence, and closes the issue.
+9. **Observe.** `verify` sends the whole incident to GitLab Observability as one OpenTelemetry trace,
+   so every stage of the incident is visible with its duration (see [Observability](#observability)).
 
 If the agent escalates, the human replies on the issue with `@ai-drift-detective-investigator-gitlab-ai-hackathon decision: revert`
 (or `adopt`). The mention trigger restarts the flow with that decision, and the same loop finishes the job.
@@ -113,6 +115,23 @@ Measured on the live environment. The full timings, caveats, and defects found a
 
 Detection was triggered by hand right after each change. On the 6-hour schedule, detection itself can take up to 6 hours.
 
+## Observability
+
+Every resolved incident becomes one OpenTelemetry trace in the group's GitLab Observability instance
+(service `drift-detective`). [`scripts/incident_trace.sh`](scripts/incident_trace.sh) builds it from GitLab's
+own records and sends it over OTLP/HTTP:
+
+| Span | Timing source |
+|---|---|
+| `drift incident #N` (root; attributes `drift.decision`, `drift.risk`, `drift.escalated`) | detect start → issue closed |
+| `detect-drift`, `investigate`, `apply`, `verify` | CI jobs API (exact) |
+| agent investigation, human decision, agent opens MR, human review and merge | issue, comment, and MR timestamps (`drift.reconstructed = true`) |
+
+The agent runs inside GitLab Duo and cannot emit spans itself. Its stages are reconstructed from the
+records it leaves behind, and are labelled as such. The pipelines are also traced automatically through
+GitLab's CI/CD pipeline instrumentation (`GITLAB_OBSERVABILITY_EXPORT=traces`). Telemetry is best-effort:
+a failed export only logs a warning and never fails `verify`.
+
 ## GitLab features used
 
 - **Duo Agent Platform:** a custom flow with two agents and a conditional router, kept as YAML in
@@ -126,6 +145,7 @@ Detection was triggered by hand right after each change. On the 6-hour schedule,
   [`scripts/security_gate.sh`](scripts/security_gate.sh), which fails on Critical or High findings.
 - **GitLab-managed OpenTofu state** and the official `gitlab-opentofu` image from the
   [OpenTofu CI/CD component](https://gitlab.com/components/opentofu).
+- **GitLab Observability:** a per-incident OpenTelemetry trace plus automatic CI/CD pipeline traces.
 - **Issues and merge requests** as the audit trail: scoped labels (`drift::investigating` → `drift::resolved`),
   and closing driven by a merge-request trailer.
 
@@ -174,7 +194,8 @@ bootstrap/                      one-time: workload identity federation and servi
 terraform/                      the managed environment (two Cloud Run services and an IAM binding)
 flows/drift-investigator.yml    the Duo custom flow (investigator and remediator)
 skills/drift-investigation/     the agent's playbook
-scripts/                        GCP auth, evidence, policy and security gates, flow start, issue closing, flow publishing
+scripts/                        GCP auth, evidence, policy and security gates, flow start, issue closing,
+                                flow publishing, incident traces
 tests/                          tests for the evidence, policy, and security gate scripts
 drift/incidents/                incident records committed by the agent's merge requests
 docs/                           measured evaluation, architecture diagram (PNG)
@@ -202,6 +223,11 @@ billing, and `tofu` (or `terraform`), `gcloud`, `glab`, and `jq` installed.
 5. **Deploy:** push to `main`, then run the manual `apply` job. `verify` should report no changes.
 6. **Schedule detection:** create a pipeline schedule on `main` (for example `0 */6 * * *`). Scheduled
    pipelines run only `detect-drift` and `investigate`.
+7. **Optional: observability.** In the group, select **Observe → Setup → Enable Observability**. Then add
+   the CI/CD variables `OTEL_EXPORTER_OTLP_ENDPOINT` (the endpoint shown there) and
+   `GITLAB_OBSERVABILITY_EXPORT=traces`. To backfill an incident that is already resolved, run
+   `OTEL_EXPORTER_OTLP_ENDPOINT=... GITLAB_API=https://gitlab.com/api/v4 PROJECT_ID=<id> GITLAB_AUTH_HEADER="PRIVATE-TOKEN: <token>" scripts/incident_trace.sh <issue iid>`.
+   Without `OTEL_EXPORTER_OTLP_ENDPOINT`, it prints the OTLP payload instead.
 
 **Try a scenario**, then click **Run** on the schedule:
 
