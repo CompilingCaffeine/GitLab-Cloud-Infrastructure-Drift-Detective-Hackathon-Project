@@ -1,93 +1,211 @@
-# Showcase
+# Cloud Infrastructure Drift Detective
 
-Transcend Hackathon Showcase workspace for @CompilingCaffeine (DevPost: compilingcaffeine). Visit the [onboarding issue](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/work_items/1) to get started.
+**A GitLab Duo Agent Platform flow that finds infrastructure drift, works out what it means, and
+proposes the fix as a merge request. A human approves every change to the cloud.**
 
-## Getting started
+Someone changes production in the cloud console. Terraform never finds out. Weeks later a routine
+`apply` silently reverts it, or an exposed service sits unnoticed. Drift Detective closes that gap
+inside GitLab: a scheduled pipeline detects the drift, a Duo flow investigates it against real
+pipeline evidence, decides whether to **revert**, **adopt**, or **escalate**, and opens a merge
+request. CI enforces guardrails, a human merges and applies, and the pipeline verifies the result
+and closes the issue.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- **Autonomy level:** Supervised. Agents investigate and prepare the fix on their own. A human approves the outcome.
+- **Live deployment (Google Cloud Run):** https://drift-demo-web-ut5yuq6zba-uc.a.run.app
+- **Evidence:** [pipelines](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/pipelines),
+  drift issues [#3](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/issues/3),
+  [#4](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/issues/4),
+  [#5](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/issues/5),
+  agent merge requests [!1](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/merge_requests/1),
+  [!2](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/merge_requests/2),
+  [!3](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/merge_requests/3),
+  and the [measured evaluation](docs/evaluation.md).
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## How it works
 
-## Add your files
+```mermaid
+flowchart TB
+  OOB["Out-of-band change<br/>console or gcloud"] -.-> GCP
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+  subgraph GCP["Google Cloud Run"]
+    direction LR
+    WEB["drift-demo-web<br/>public"]
+    INT["drift-demo-internal<br/>auth required"]
+  end
 
+  subgraph S1["1 Detect: GitLab CI"]
+    direction LR
+    SCHED["Schedule<br/>every 6 h"] --> DET["detect-drift<br/>tofu plan, read-only identity"]
+    DET -->|"drift found"| INV["investigate<br/>evidence issue,<br/>start flow via API"]
+  end
+
+  subgraph S2["2 Investigate: GitLab Duo flow"]
+    direction LR
+    I["investigator agent<br/>check job log, risk, decide"] -->|"revert / adopt"| R["remediator agent<br/>opens merge request"]
+    I -->|"escalate"| ESC["comment only,<br/>no merge request"]
+  end
+
+  subgraph S3["3 Approve: human"]
+    direction LR
+    MRCI["MR pipeline<br/>fmt, validate, tests,<br/>plan, policy guardrails"] --> H1{{"review and merge"}}
+    H2{{"reply: decision revert / adopt"}}
+  end
+
+  subgraph S4["4 Apply and verify: GitLab CI"]
+    direction LR
+    APPLY["manual apply<br/>main-only identity"] --> VER["verify<br/>plan must be empty"] --> CLOSE["close issue<br/>with evidence links"]
+  end
+
+  DET -.-> GCP
+  INV --> I
+  R --> MRCI
+  ESC --> H2
+  H2 -->|"mention trigger"| I
+  H1 --> APPLY
+  APPLY -.-> GCP
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase.git
-git branch -M main
-git push -uf origin main
+
+1. **Detect.** A pipeline schedule runs `tofu plan -detailed-exitcode` against the live environment
+   with a read-only identity. `scripts/summarize_plan.sh` turns the plan into evidence. It separates
+   out-of-band drift from unapplied code, keeps only attributes the configuration manages, and redacts
+   sensitive values and personal emails. The full JSON plan never leaves the job.
+2. **Hand off.** If there is real drift, `scripts/start_drift_flow.sh` opens one deduplicated issue
+   with the evidence and starts the flow through `POST /api/v4/ai/duo_workflows/workflows`.
+3. **Investigate.** The investigator agent follows [`skills/drift-investigation/SKILL.md`](skills/drift-investigation/SKILL.md).
+   It cross-checks the issue against the `detect-drift` **job log**, reads the declared Terraform,
+   classifies risk, labels every guess as a hypothesis, and posts one structured report.
+4. **Decide.** A conditional router sends `revert` and `adopt` to the remediator agent. `escalate` ends
+   the flow with a comment and no merge request.
+5. **Propose.** The remediator opens one merge request from `duo/fix/drift-issue-N`. Revert MRs only add
+   an incident record (the code is already right). Adopt MRs change only the drifted attributes.
+6. **Validate.** The MR pipeline runs `fmt`, `validate`, the test suite, and a plan with
+   [`scripts/policy_check.sh`](scripts/policy_check.sh). The guardrails hold even if the agent is wrong.
+7. **Approve and apply.** A human merges and clicks the manual `apply` job on `main`.
+8. **Verify and close.** `verify` re-plans and must see **no changes**. It then follows the merged MR's
+   `Drift-Issue: #N` trailer, posts links to the evidence, and closes the issue.
+
+If the agent escalates, the human replies on the issue with `@ai-drift-detective-investigator-gitlab-ai-hackathon decision: revert`
+(or `adopt`). The mention trigger restarts the flow with that decision, and the same loop finishes the job.
+
+## How the agent decides
+
+| Decision | When | Merge request |
+|---|---|---|
+| **escalate** | Checked first. Evidence missing or contradictory, the plan would `delete` or `replace`, a runtime identity changed, or the agent is unsure | None. Both options are laid out for a human |
+| **revert** | Any other High-risk drift (authentication weakened, invokers changed), or anything it cannot justify adopting | Incident record only; apply restores the declared state |
+| **adopt** | Low risk (or Medium with no security impact), within every guardrail, and reverting would plausibly reduce availability | Smallest `terraform/` edit plus incident record |
+
+Guardrails, enforced in CI on every plan: the internal service must require authentication, no
+`allUsers`/`allAuthenticatedUsers` invokers, `max_instance_count` at most 5, and the `managed-by = terraform`
+label on every service.
+
+## Results
+
+Measured on the live environment. The full timings, caveats, and defects found are in [docs/evaluation.md](docs/evaluation.md).
+
+| Scenario | Agent decision | Detection → MR or escalation | Apply → verified and closed |
+|---|---|---|---|
+| Capacity raised 2 → 4 with gcloud | adopt (Low) | 2 min 33 s | 46 s |
+| Internal API authentication disabled | revert (High) | 2 min 23 s | 68 s |
+| No drift | no issue, no agent run | 46 s (detection only) | n/a |
+| Internal API identity swapped | escalate (High), then revert on human decision | 2 min 16 s | 63 s |
+
+Detection was triggered by hand right after each change. On the 6-hour schedule, detection itself can take up to 6 hours.
+
+## GitLab features used
+
+- **Duo Agent Platform:** a custom flow with two agents and a conditional router, kept as YAML in
+  [`flows/`](flows) and published by [`scripts/publish_flow.sh`](scripts/publish_flow.sh) through the
+  AI Catalog GraphQL API. It is started by the workflows REST API, and resumed by a **mention trigger**.
+- **Project skill:** [`skills/drift-investigation/SKILL.md`](skills/drift-investigation/SKILL.md) is the
+  agent's playbook, versioned and reviewed like code.
+- **CI/CD:** pipeline schedules, a manual job as the approval gate, environments, `resource_group`
+  serialization, dotenv artifacts between jobs, the Terraform MR widget report, and **OIDC `id_tokens`**.
+- **GitLab-managed OpenTofu state** and the official `gitlab-opentofu` image from the
+  [OpenTofu CI/CD component](https://gitlab.com/components/opentofu).
+- **Issues and merge requests** as the audit trail: scoped labels (`drift::investigating` → `drift::resolved`),
+  and closing driven by a merge-request trailer.
+
+## Security model
+
+- **No long-lived cloud keys.** CI exchanges its OIDC token for short-lived Google credentials
+  (workload identity federation, locked to this project path).
+- **Two identities.** `drift-plan` (`roles/run.viewer`) for detection and every plan. `drift-apply`
+  (`roles/run.admin`) can only be used by pipelines on `main`, and only through the manual `apply` job.
+- **The agent never touches the cloud.** The flow gets no cloud credentials. It reads GitLab, writes one
+  comment, and opens at most one merge request. It cannot merge, approve, or run pipelines.
+- **Guardrails don't depend on the agent.** `policy_check.sh` fails any plan that breaks a guardrail,
+  so an unsafe "adopt" cannot pass CI.
+- **Published evidence is redacted.** Sensitive values are masked and personal emails are removed
+  before anything reaches an issue. The raw JSON plan never becomes an artifact. The binary plan cache
+  that `apply` needs is an artifact, restricted to project members (`access: developer`).
+
+**Known limits** (from the hackathon's Developer role, documented rather than hidden):
+- `main` is not protected against Developer pushes, so "main only" for the apply identity is weaker than
+  in a real setup. With Maintainer access, protect `main` and the `demo` environment, and require MR approval.
+- The flow is started with a personal access token (`DUO_FLOW_TOKEN`, `api` scope) in a masked, unprotected
+  CI variable. GitLab triggers ignore bot users, so a human token is needed to start flows from CI.
+- Plans run with `-lock=false`, because the flow's service account can read but not lock state. Apply
+  still locks, and `resource_group` serializes every job that touches the state.
+
+## Repository layout
+
+```text
+.gitlab-ci.yml                  validate, plan, apply, verify, drift, investigate
+bootstrap/                      one-time: workload identity federation and service accounts
+terraform/                      the managed environment (two Cloud Run services and an IAM binding)
+flows/drift-investigator.yml    the Duo custom flow (investigator and remediator)
+skills/drift-investigation/     the agent's playbook
+scripts/                        GCP auth, evidence, policy, flow start, issue closing, flow publishing
+tests/                          tests for the evidence and policy scripts (real plan fixture)
+drift/incidents/                incident records committed by the agent's merge requests
+docs/                           measured evaluation, architecture diagram (PNG)
 ```
 
-## Integrate with your tools
+## Run it yourself
 
-* [Set up project integrations](https://gitlab.com/gitlab-ai-hackathon/transcend-october-2026/33443675/showcase/-/settings/integrations)
+Requires a GitLab project with Duo Agent Platform (custom flows enabled), a Google Cloud project with
+billing, and `tofu` (or `terraform`), `gcloud`, `glab`, and `jq` installed.
 
-## Collaborate with your team
+1. **Point it at your projects.** Replace `drift-detective-2026`, the project number, and the GitLab path
+   in `bootstrap/variables.tf`, `terraform/variables.tf`, and the `variables` and `id_tokens` in `.gitlab-ci.yml`.
+2. **Bootstrap Google Cloud** (identities only, local state):
+   ```sh
+   gcloud services enable run.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
+     sts.googleapis.com cloudresourcemanager.googleapis.com
+   cd bootstrap && tofu init && tofu apply
+   ```
+3. **Add the CI variable** `DUO_FLOW_TOKEN`: a personal access token with `api` scope, masked.
+4. **Publish and enable the flow:**
+   ```sh
+   GITLAB_TOKEN=$(glab config get token) GITLAB_PROJECT_ID=<id> \
+     scripts/publish_flow.sh drift-detective-investigator flows/drift-investigator.yml "Drift investigator"
+   ```
+5. **Deploy:** push to `main`, then run the manual `apply` job. `verify` should report no changes.
+6. **Schedule detection:** create a pipeline schedule on `main` (for example `0 */6 * * *`). Scheduled
+   pipelines run only `detect-drift` and `investigate`.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+**Try a scenario**, then click **Run** on the schedule:
 
-## Test and Deploy
+```sh
+gcloud run services update drift-demo-web --region us-central1 --max-instances 4      # expect adopt
+gcloud run services update drift-demo-internal --region us-central1 --no-invoker-iam-check  # expect revert
+gcloud run services update drift-demo-internal --region us-central1 \
+  --service-account drift-demo-web@<project>.iam.gserviceaccount.com                  # expect escalate
+```
 
-Use the built-in continuous integration in GitLab.
+Run the tests locally with `tests/run_tests.sh` (needs only `sh` and `jq`).
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+## Cost and teardown
 
-***
+Both services scale to zero, so the environment costs close to nothing at idle. A $10 budget alert is
+set on the project. Each agent investigation uses GitLab Credits, and
+runs with no drift start no agent.
 
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+To remove everything: delete the pipeline schedule, delete the `demo` Terraform state
+(**Operate → Terraform states**), remove the flow from the AI Catalog, and run
+`gcloud projects delete drift-detective-2026`.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+[MIT](LICENSE)
