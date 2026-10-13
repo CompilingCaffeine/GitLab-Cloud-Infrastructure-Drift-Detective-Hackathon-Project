@@ -22,3 +22,4 @@ terraform.rc
 # Private working notes (not published)
 docs/demo-script.md
 gitlab_infrastructure_drift_agent_handoff.md
+devpost_submission_draft.md
