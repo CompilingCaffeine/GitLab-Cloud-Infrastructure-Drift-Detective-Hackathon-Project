@@ -59,6 +59,8 @@ and merge, and 36 s of apply.
   identity changes" conflicted.
 - **Loose human wording.** In scenario 4 the human wrote `revert` without the `decision:` prefix. The
   agent accepted it as an unambiguous decision, but recorded that the wording differed from the playbook.
+  Afterwards the playbook was tightened: the agent now asks for the exact `decision: revert|adopt`
+  wording instead of interpreting it.
 
 ## Defects found by the evaluation (all fixed)
 

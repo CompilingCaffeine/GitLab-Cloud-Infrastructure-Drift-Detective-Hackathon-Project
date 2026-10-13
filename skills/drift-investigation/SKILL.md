@@ -44,10 +44,15 @@ reverting a capacity increase during a traffic spike can cause an outage.
 Choose exactly one decision.
 
 **Human decision first.** If a human (an author whose username does not start with `ai-`) has
-commented on the drift issue with `decision: revert` or `decision: adopt`, and that comment is newer
-than the latest "Drift investigation" comment, that is the decision. Name the human, confirm the job log
-still shows the drift, and follow it, with one exception: never adopt a live value that breaks a guardrail.
-In that case, explain why and escalate again.
+commented on the drift issue with the exact text `decision: revert` or `decision: adopt`, and that
+comment is newer than the latest "Drift investigation" comment, that is the decision. Name the human,
+quote their comment, confirm the job log still shows the drift, and follow it, with one exception:
+never adopt a live value that breaks a guardrail. In that case, explain why and escalate again.
+
+If a human mentioned you but the comment does not contain `decision: revert` or `decision: adopt`
+exactly, do **not** interpret it, even if the intent seems clear. Post one short comment that quotes
+what they wrote and asks them to reply with the exact wording, then finish with `escalate`.
+An infrastructure change needs an unambiguous instruction.
 
 Otherwise, check the escalate conditions **first**: if any of them holds, the decision is escalate,
 whatever the risk level.
