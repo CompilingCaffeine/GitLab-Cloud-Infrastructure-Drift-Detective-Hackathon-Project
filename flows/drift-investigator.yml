@@ -1,0 +1,129 @@
+# Drift Detective: GitLab Duo custom flow (published by scripts/publish_flow.sh).
+# Started by CI (scripts/start_drift_flow.sh) with a goal naming the drift issue and detect-drift job.
+#
+#   investigator --"revert"/"adopt"--> remediator --> end
+#                --anything else-----> end           (escalated: comment only, no MR)
+#
+# The flow never receives cloud credentials. It reads evidence from GitLab, writes one
+# investigation comment, and at most opens one merge request. Humans merge and apply.
+version: "v1"
+environment: ambient
+
+components:
+  - name: "investigator"
+    type: AgentComponent
+    prompt_id: "drift_investigator"
+    inputs:
+      - from: "context:goal"
+        as: "goal"
+      - from: "context:project_id"
+        as: "project_id"
+      - from: "context:inputs.workspace_agent_skills"
+        as: "workspace_agent_skills"
+        optional: true
+    toolset:
+      - "get_issue"
+      - "list_issue_notes"
+      - "get_job_logs"
+      - "read_file"
+      - "list_dir"
+      - "get_repository_file"
+      - "create_issue_note"
+
+  - name: "remediator"
+    type: AgentComponent
+    prompt_id: "drift_remediator"
+    inputs:
+      - from: "context:goal"
+        as: "goal"
+      - from: "context:project_id"
+        as: "project_id"
+      - from: "context:investigator.final_answer"
+        as: "decision"
+      - from: "context:inputs.workspace_agent_skills"
+        as: "workspace_agent_skills"
+        optional: true
+    toolset:
+      - "get_issue"
+      - "list_issue_notes"
+      - "read_file"
+      - "get_repository_file"
+      - "create_commit"
+      - "create_merge_request"
+      - "create_issue_note"
+
+prompts:
+  - prompt_id: "drift_investigator"
+    name: "Drift investigator"
+    unit_primitives: []
+    prompt_template:
+      system: |
+        You are the Drift Detective investigator for an OpenTofu-managed Google Cloud environment.
+        You work only from evidence returned by your tools. You never invent resource names, values,
+        authors, or causes. Anything not shown by a tool is labelled "Hypothesis:" or listed under
+        "Uncertainty". You do not change infrastructure and you do not open merge requests.
+
+        Before anything else, read the file skills/drift-investigation/SKILL.md with read_file and
+        follow it exactly. It defines how to verify evidence, classify risk, decide, and format the report.
+        {{workspace_agent_skills}}
+      user: |
+        Project ID: {{project_id}}
+
+        Assignment from CI:
+        {{goal}}
+
+        Do this:
+        1. Read skills/drift-investigation/SKILL.md.
+        2. Read the drift issue named in the assignment.
+        3. Read the detect-drift job log named in the assignment with get_job_logs, and compare it with the issue evidence.
+        4. Read the relevant declared configuration under terraform/.
+        5. Post exactly ONE comment on the drift issue using the report format from the skill.
+        6. Then finish. Your final answer must be exactly one lowercase word and nothing else:
+           revert, adopt, or escalate.
+    params:
+      timeout: 300
+
+  - prompt_id: "drift_remediator"
+    name: "Drift remediator"
+    unit_primitives: []
+    prompt_template:
+      system: |
+        You are the Drift Detective remediator. You turn an approved investigation decision into one
+        reviewable merge request. You never merge, approve, run pipelines, or touch files outside
+        terraform/ and drift/incidents/. Follow skills/drift-investigation/SKILL.md section 5 exactly.
+        {{workspace_agent_skills}}
+      user: |
+        Project ID: {{project_id}}
+        Investigator decision: {{decision}}
+
+        Assignment from CI:
+        {{goal}}
+
+        Do this:
+        1. Read skills/drift-investigation/SKILL.md (section 5: merge request rules).
+        2. Read the drift issue and the investigator's "Drift investigation" comment on it.
+        3. If the decision is "adopt", read terraform/main.tf and prepare the smallest edit that sets
+           only the drifted attributes to their live values. If the decision is "revert", do not edit terraform/.
+        4. Make ONE create_commit call on a new branch named duo/fix/drift-issue-<issue iid>, starting from
+           the default branch, that creates drift/incidents/issue-<issue iid>.md (the investigation report)
+           and, for "adopt" only, applies the terraform/ edit using old_str/new_str.
+        5. Open the merge request into the default branch with the title and description rules from the skill.
+           The description must end with the line: Drift-Issue: #<issue iid>
+        6. Post a short comment on the drift issue linking the merge request and stating that a human must
+           review it, merge it, and run the manual apply job.
+    params:
+      timeout: 300
+
+routers:
+  - from: "investigator"
+    condition:
+      input: "context:investigator.final_answer"
+      routes:
+        "revert": "remediator"
+        "adopt": "remediator"
+        "default_route": "end"
+  - from: "remediator"
+    to: "end"
+
+flow:
+  entry_point: "investigator"

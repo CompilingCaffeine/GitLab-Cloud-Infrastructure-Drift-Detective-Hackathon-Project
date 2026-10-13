@@ -1,10 +1,12 @@
 # Cloud Infrastructure Drift Detective
 #
 # Pipelines:
-#   merge request  -> fmt, validate, plan (read-only identity), plan shown in the MR widget
-#   main branch    -> plan, then a MANUAL apply (write identity), then verify (no drift remains)
+#   merge request  -> fmt, validate, tests, plan + policy guardrails (read-only identity)
+#   main branch    -> the same, then a MANUAL apply (write identity), then verify (no drift
+#                     remains) and close the drift issue the merged MR came from
 #   drift check    -> scheduled (or run with DRIFT_CHECK=true): plan against the live
-#                     environment and publish redacted drift evidence
+#                     environment, publish redacted evidence, open a drift issue, and start
+#                     the GitLab Duo investigator flow, which proposes a fix as a merge request
 
 workflow:
   rules:
@@ -20,6 +22,7 @@ stages:
   - apply
   - verify
   - drift
+  - investigate
 
 variables:
   # Non-secret outputs of bootstrap/ (identities, not credentials).
@@ -29,6 +32,9 @@ variables:
   # gitlab-tofu wrapper: GitLab-managed state named "demo", config in terraform/.
   GITLAB_TOFU_ROOT_DIR: ${CI_PROJECT_DIR}/terraform
   GITLAB_TOFU_STATE_NAME: demo
+  # Full JSON plans can contain secrets: they stay in the job's temp dir, never in artifacts.
+  FULL_PLAN: /tmp/full-plan.json
+  DRIFT_FLOW_NAME: drift-detective-investigator
   DRIFT_CHECK:
     value: "false"
     description: Set to "true" to run a drift check instead of the normal pipeline.
@@ -77,6 +83,13 @@ validate:
   script:
     - gitlab-tofu validate
 
+test:
+  stage: validate
+  extends: .normal-rules
+  cache: []
+  script:
+    - tests/run_tests.sh
+
 # ---------- plan ----------
 
 plan:
@@ -87,8 +100,11 @@ plan:
   resource_group: tofu-demo
   script:
     - gitlab-tofu plan
-    - gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/plan.cache" | scripts/summarize_plan.sh /dev/stdin evidence
+    - gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/plan.cache" > "$FULL_PLAN"
+    - scripts/summarize_plan.sh "$FULL_PLAN" evidence
+    - scripts/policy_check.sh "$FULL_PLAN"
   artifacts:
+    when: always
     # The plan cache can embed secrets: keep it to project members only.
     access: developer
     expire_in: 7 days
@@ -141,12 +157,14 @@ verify:
       gitlab-tofu plan
       code=$?
       set -e
-      gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/verify.cache" | scripts/summarize_plan.sh /dev/stdin evidence
+      gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/verify.cache" > "$FULL_PLAN"
+      scripts/summarize_plan.sh "$FULL_PLAN" evidence
       case "$code" in
         0) echo "VERIFIED: live environment matches the declared configuration." ;;
         2) echo "NOT VERIFIED: differences remain after apply." >&2; exit 1 ;;
         *) echo "Plan failed (exit $code)." >&2; exit "$code" ;;
       esac
+    - scripts/close_drift_issue.sh
   artifacts:
     when: always
     expire_in: 30 days
@@ -175,12 +193,15 @@ detect-drift:
         0|2) ;;
         *) echo "Plan failed (exit $code); cannot determine drift." >&2; exit "$code" ;;
       esac
-      gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/drift.cache" | scripts/summarize_plan.sh /dev/stdin evidence
+      gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/drift.cache" > "$FULL_PLAN"
+      # The report is printed to this job log too: the investigator cross-checks the issue against it.
+      scripts/summarize_plan.sh "$FULL_PLAN" evidence
       # OUT_OF_SYNC: live environment differs from main (exit 2).
       # DRIFT_DETECTED: the difference includes changes made outside OpenTofu.
       {
         echo "OUT_OF_SYNC=$([ "$code" -eq 2 ] && echo true || echo false)"
         echo "DRIFT_DETECTED=$(jq -r .drift_detected evidence/drift-report.json)"
+        echo "DETECT_JOB_ID=$CI_JOB_ID"
       } | tee drift.env
   artifacts:
     when: always
@@ -189,3 +210,17 @@ detect-drift:
       - evidence/
     reports:
       dotenv: drift.env
+
+# ---------- agentic investigation ----------
+
+investigate:
+  stage: investigate
+  needs:
+    - job: detect-drift
+      artifacts: true
+  rules:
+    - if: ($DRIFT_CHECK == "true" || $CI_PIPELINE_SOURCE == "schedule") && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  cache: []
+  timeout: 5m
+  script:
+    - scripts/start_drift_flow.sh

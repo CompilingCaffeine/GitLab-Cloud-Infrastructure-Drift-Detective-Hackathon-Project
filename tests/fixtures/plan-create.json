@@ -1,0 +1,858 @@
+{
+  "format_version": "1.2",
+  "planned_values": {
+    "outputs": {
+      "internal_url": {
+        "sensitive": false
+      },
+      "web_url": {
+        "sensitive": false
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "google_cloud_run_v2_service.internal",
+          "mode": "managed",
+          "type": "google_cloud_run_v2_service",
+          "name": "internal",
+          "provider_name": "registry.opentofu.org/hashicorp/google",
+          "schema_version": 0,
+          "values": {
+            "annotations": null,
+            "binary_authorization": [],
+            "build_config": [],
+            "client": null,
+            "client_version": null,
+            "custom_audiences": null,
+            "default_uri_disabled": null,
+            "deletion_policy": "DELETE",
+            "deletion_protection": false,
+            "description": null,
+            "effective_labels": {
+              "app": "drift-detective",
+              "goog-terraform-provisioned": "true",
+              "managed-by": "terraform"
+            },
+            "iap_enabled": null,
+            "ingress": "INGRESS_TRAFFIC_ALL",
+            "invoker_iam_disabled": false,
+            "labels": {
+              "app": "drift-detective",
+              "managed-by": "terraform"
+            },
+            "location": "us-central1",
+            "multi_region_settings": [],
+            "name": "drift-demo-internal",
+            "project": "drift-detective-2026",
+            "ssh_enabled": null,
+            "tags": null,
+            "template": [
+              {
+                "annotations": null,
+                "containers": [
+                  {
+                    "args": null,
+                    "base_image_uri": null,
+                    "command": null,
+                    "depends_on": null,
+                    "env": [
+                      {
+                        "name": "APP_MODE",
+                        "value": "internal",
+                        "value_source": []
+                      }
+                    ],
+                    "image": "us-docker.pkg.dev/cloudrun/container/hello:latest",
+                    "liveness_probe": [],
+                    "name": null,
+                    "readiness_probe": [],
+                    "resources": [
+                      {
+                        "cpu_idle": true,
+                        "limits": {
+                          "cpu": "1",
+                          "memory": "512Mi"
+                        },
+                        "startup_cpu_boost": null
+                      }
+                    ],
+                    "sandbox_launcher": null,
+                    "volume_mounts": [],
+                    "working_dir": null
+                  }
+                ],
+                "encryption_key": null,
+                "execution_environment": null,
+                "gpu_zonal_redundancy_disabled": null,
+                "health_check_disabled": null,
+                "labels": null,
+                "node_selector": [],
+                "revision": null,
+                "sandboxes": [],
+                "scaling": [
+                  {
+                    "concurrency_utilization": null,
+                    "cpu_utilization": null,
+                    "max_instance_count": 1,
+                    "min_instance_count": 0
+                  }
+                ],
+                "service_account": "drift-demo-internal@drift-detective-2026.iam.gserviceaccount.com",
+                "session_affinity": null,
+                "volumes": [],
+                "vpc_access": [],
+                "workload_identity_config": []
+              }
+            ],
+            "terraform_labels": {
+              "app": "drift-detective",
+              "goog-terraform-provisioned": "true",
+              "managed-by": "terraform"
+            },
+            "timeouts": null
+          },
+          "sensitive_values": {
+            "binary_authorization": [],
+            "build_config": [],
+            "conditions": [],
+            "effective_annotations": {},
+            "effective_labels": {},
+            "labels": {},
+            "multi_region_settings": [],
+            "scaling": [],
+            "template": [
+              {
+                "containers": [
+                  {
+                    "build_info": [],
+                    "env": [
+                      {
+                        "value_source": []
+                      }
+                    ],
+                    "liveness_probe": [],
+                    "ports": [],
+                    "readiness_probe": [],
+                    "resources": [
+                      {
+                        "limits": {}
+                      }
+                    ],
+                    "startup_probe": [],
+                    "volume_mounts": []
+                  }
+                ],
+                "node_selector": [],
+                "sandboxes": [],
+                "scaling": [
+                  {}
+                ],
+                "volumes": [],
+                "vpc_access": [],
+                "workload_identity_config": []
+              }
+            ],
+            "terminal_condition": [],
+            "terraform_labels": {},
+            "traffic": [],
+            "traffic_statuses": [],
+            "urls": []
+          },
+          "identity": {
+            "location": null,
+            "name": null,
+            "project": null
+          },
+          "identity_schema_version": 1
+        },
+        {
+          "address": "google_cloud_run_v2_service.web",
+          "mode": "managed",
+          "type": "google_cloud_run_v2_service",
+          "name": "web",
+          "provider_name": "registry.opentofu.org/hashicorp/google",
+          "schema_version": 0,
+          "values": {
+            "annotations": null,
+            "binary_authorization": [],
+            "build_config": [],
+            "client": null,
+            "client_version": null,
+            "custom_audiences": null,
+            "default_uri_disabled": null,
+            "deletion_policy": "DELETE",
+            "deletion_protection": false,
+            "description": null,
+            "effective_labels": {
+              "app": "drift-detective",
+              "goog-terraform-provisioned": "true",
+              "managed-by": "terraform"
+            },
+            "iap_enabled": null,
+            "ingress": "INGRESS_TRAFFIC_ALL",
+            "invoker_iam_disabled": true,
+            "labels": {
+              "app": "drift-detective",
+              "managed-by": "terraform"
+            },
+            "location": "us-central1",
+            "multi_region_settings": [],
+            "name": "drift-demo-web",
+            "project": "drift-detective-2026",
+            "ssh_enabled": null,
+            "tags": null,
+            "template": [
+              {
+                "annotations": null,
+                "containers": [
+                  {
+                    "args": null,
+                    "base_image_uri": null,
+                    "command": null,
+                    "depends_on": null,
+                    "env": [
+                      {
+                        "name": "APP_MODE",
+                        "value": "demo",
+                        "value_source": []
+                      },
+                      {
+                        "name": "INTERNAL_API_URL",
+                        "value_source": []
+                      }
+                    ],
+                    "image": "us-docker.pkg.dev/cloudrun/container/hello:latest",
+                    "liveness_probe": [],
+                    "name": null,
+                    "readiness_probe": [],
+                    "resources": [
+                      {
+                        "cpu_idle": true,
+                        "limits": {
+                          "cpu": "1",
+                          "memory": "512Mi"
+                        },
+                        "startup_cpu_boost": null
+                      }
+                    ],
+                    "sandbox_launcher": null,
+                    "volume_mounts": [],
+                    "working_dir": null
+                  }
+                ],
+                "encryption_key": null,
+                "execution_environment": null,
+                "gpu_zonal_redundancy_disabled": null,
+                "health_check_disabled": null,
+                "labels": null,
+                "node_selector": [],
+                "revision": null,
+                "sandboxes": [],
+                "scaling": [
+                  {
+                    "concurrency_utilization": null,
+                    "cpu_utilization": null,
+                    "max_instance_count": 2,
+                    "min_instance_count": 0
+                  }
+                ],
+                "service_account": "drift-demo-web@drift-detective-2026.iam.gserviceaccount.com",
+                "session_affinity": null,
+                "volumes": [],
+                "vpc_access": [],
+                "workload_identity_config": []
+              }
+            ],
+            "terraform_labels": {
+              "app": "drift-detective",
+              "goog-terraform-provisioned": "true",
+              "managed-by": "terraform"
+            },
+            "timeouts": null
+          },
+          "sensitive_values": {
+            "binary_authorization": [],
+            "build_config": [],
+            "conditions": [],
+            "effective_annotations": {},
+            "effective_labels": {},
+            "labels": {},
+            "multi_region_settings": [],
+            "scaling": [],
+            "template": [
+              {
+                "containers": [
+                  {
+                    "build_info": [],
+                    "env": [
+                      {
+                        "value_source": []
+                      },
+                      {
+                        "value_source": []
+                      }
+                    ],
+                    "liveness_probe": [],
+                    "ports": [],
+                    "readiness_probe": [],
+                    "resources": [
+                      {
+                        "limits": {}
+                      }
+                    ],
+                    "startup_probe": [],
+                    "volume_mounts": []
+                  }
+                ],
+                "node_selector": [],
+                "sandboxes": [],
+                "scaling": [
+                  {}
+                ],
+                "volumes": [],
+                "vpc_access": [],
+                "workload_identity_config": []
+              }
+            ],
+            "terminal_condition": [],
+            "terraform_labels": {},
+            "traffic": [],
+            "traffic_statuses": [],
+            "urls": []
+          },
+          "identity": {
+            "location": null,
+            "name": null,
+            "project": null
+          },
+          "identity_schema_version": 1
+        },
+        {
+          "address": "google_cloud_run_v2_service_iam_binding.internal_invoker",
+          "mode": "managed",
+          "type": "google_cloud_run_v2_service_iam_binding",
+          "name": "internal_invoker",
+          "provider_name": "registry.opentofu.org/hashicorp/google",
+          "schema_version": 0,
+          "values": {
+            "condition": [],
+            "location": "us-central1",
+            "members": [
+              "serviceAccount:drift-demo-web@drift-detective-2026.iam.gserviceaccount.com"
+            ],
+            "name": "drift-demo-internal",
+            "role": "roles/run.invoker"
+          },
+          "sensitive_values": {
+            "condition": [],
+            "members": [
+              false
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "google_cloud_run_v2_service.internal",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_service",
+      "name": "internal",
+      "provider_name": "registry.opentofu.org/hashicorp/google",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "annotations": null,
+          "binary_authorization": [],
+          "build_config": [],
+          "client": null,
+          "client_version": null,
+          "custom_audiences": null,
+          "default_uri_disabled": null,
+          "deletion_policy": "DELETE",
+          "deletion_protection": false,
+          "description": null,
+          "effective_labels": {
+            "app": "drift-detective",
+            "goog-terraform-provisioned": "true",
+            "managed-by": "terraform"
+          },
+          "iap_enabled": null,
+          "ingress": "INGRESS_TRAFFIC_ALL",
+          "invoker_iam_disabled": false,
+          "labels": {
+            "app": "drift-detective",
+            "managed-by": "terraform"
+          },
+          "location": "us-central1",
+          "multi_region_settings": [],
+          "name": "drift-demo-internal",
+          "project": "drift-detective-2026",
+          "ssh_enabled": null,
+          "tags": null,
+          "template": [
+            {
+              "annotations": null,
+              "containers": [
+                {
+                  "args": null,
+                  "base_image_uri": null,
+                  "command": null,
+                  "depends_on": null,
+                  "env": [
+                    {
+                      "name": "APP_MODE",
+                      "value": "internal",
+                      "value_source": []
+                    }
+                  ],
+                  "image": "us-docker.pkg.dev/cloudrun/container/hello:latest",
+                  "liveness_probe": [],
+                  "name": null,
+                  "readiness_probe": [],
+                  "resources": [
+                    {
+                      "cpu_idle": true,
+                      "limits": {
+                        "cpu": "1",
+                        "memory": "512Mi"
+                      },
+                      "startup_cpu_boost": null
+                    }
+                  ],
+                  "sandbox_launcher": null,
+                  "volume_mounts": [],
+                  "working_dir": null
+                }
+              ],
+              "encryption_key": null,
+              "execution_environment": null,
+              "gpu_zonal_redundancy_disabled": null,
+              "health_check_disabled": null,
+              "labels": null,
+              "node_selector": [],
+              "revision": null,
+              "sandboxes": [],
+              "scaling": [
+                {
+                  "concurrency_utilization": null,
+                  "cpu_utilization": null,
+                  "max_instance_count": 1,
+                  "min_instance_count": 0
+                }
+              ],
+              "service_account": "drift-demo-internal@drift-detective-2026.iam.gserviceaccount.com",
+              "session_affinity": null,
+              "volumes": [],
+              "vpc_access": [],
+              "workload_identity_config": []
+            }
+          ],
+          "terraform_labels": {
+            "app": "drift-detective",
+            "goog-terraform-provisioned": "true",
+            "managed-by": "terraform"
+          },
+          "timeouts": null
+        },
+        "after_unknown": {
+          "binary_authorization": [],
+          "build_config": [],
+          "conditions": true,
+          "create_time": true,
+          "creator": true,
+          "delete_time": true,
+          "effective_annotations": true,
+          "effective_labels": {},
+          "etag": true,
+          "expire_time": true,
+          "generation": true,
+          "id": true,
+          "labels": {},
+          "last_modifier": true,
+          "latest_created_revision": true,
+          "latest_ready_revision": true,
+          "launch_stage": true,
+          "multi_region_settings": [],
+          "observed_generation": true,
+          "reconciling": true,
+          "scaling": true,
+          "template": [
+            {
+              "containers": [
+                {
+                  "build_info": true,
+                  "env": [
+                    {
+                      "value_source": []
+                    }
+                  ],
+                  "liveness_probe": [],
+                  "ports": true,
+                  "readiness_probe": [],
+                  "resources": [
+                    {
+                      "limits": {}
+                    }
+                  ],
+                  "startup_probe": true,
+                  "volume_mounts": []
+                }
+              ],
+              "max_instance_request_concurrency": true,
+              "node_selector": [],
+              "sandboxes": [],
+              "scaling": [
+                {}
+              ],
+              "timeout": true,
+              "volumes": [],
+              "vpc_access": [],
+              "workload_identity_config": []
+            }
+          ],
+          "terminal_condition": true,
+          "terraform_labels": {},
+          "traffic": true,
+          "traffic_statuses": true,
+          "uid": true,
+          "update_time": true,
+          "uri": true,
+          "urls": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {
+          "binary_authorization": [],
+          "build_config": [],
+          "conditions": [],
+          "effective_annotations": {},
+          "effective_labels": {},
+          "labels": {},
+          "multi_region_settings": [],
+          "scaling": [],
+          "template": [
+            {
+              "containers": [
+                {
+                  "build_info": [],
+                  "env": [
+                    {
+                      "value_source": []
+                    }
+                  ],
+                  "liveness_probe": [],
+                  "ports": [],
+                  "readiness_probe": [],
+                  "resources": [
+                    {
+                      "limits": {}
+                    }
+                  ],
+                  "startup_probe": [],
+                  "volume_mounts": []
+                }
+              ],
+              "node_selector": [],
+              "sandboxes": [],
+              "scaling": [
+                {}
+              ],
+              "volumes": [],
+              "vpc_access": [],
+              "workload_identity_config": []
+            }
+          ],
+          "terminal_condition": [],
+          "terraform_labels": {},
+          "traffic": [],
+          "traffic_statuses": [],
+          "urls": []
+        },
+        "after_identity": {
+          "location": null,
+          "name": null,
+          "project": null
+        }
+      }
+    },
+    {
+      "address": "google_cloud_run_v2_service.web",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_service",
+      "name": "web",
+      "provider_name": "registry.opentofu.org/hashicorp/google",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "annotations": null,
+          "binary_authorization": [],
+          "build_config": [],
+          "client": null,
+          "client_version": null,
+          "custom_audiences": null,
+          "default_uri_disabled": null,
+          "deletion_policy": "DELETE",
+          "deletion_protection": false,
+          "description": null,
+          "effective_labels": {
+            "app": "drift-detective",
+            "goog-terraform-provisioned": "true",
+            "managed-by": "terraform"
+          },
+          "iap_enabled": null,
+          "ingress": "INGRESS_TRAFFIC_ALL",
+          "invoker_iam_disabled": true,
+          "labels": {
+            "app": "drift-detective",
+            "managed-by": "terraform"
+          },
+          "location": "us-central1",
+          "multi_region_settings": [],
+          "name": "drift-demo-web",
+          "project": "drift-detective-2026",
+          "ssh_enabled": null,
+          "tags": null,
+          "template": [
+            {
+              "annotations": null,
+              "containers": [
+                {
+                  "args": null,
+                  "base_image_uri": null,
+                  "command": null,
+                  "depends_on": null,
+                  "env": [
+                    {
+                      "name": "APP_MODE",
+                      "value": "demo",
+                      "value_source": []
+                    },
+                    {
+                      "name": "INTERNAL_API_URL",
+                      "value_source": []
+                    }
+                  ],
+                  "image": "us-docker.pkg.dev/cloudrun/container/hello:latest",
+                  "liveness_probe": [],
+                  "name": null,
+                  "readiness_probe": [],
+                  "resources": [
+                    {
+                      "cpu_idle": true,
+                      "limits": {
+                        "cpu": "1",
+                        "memory": "512Mi"
+                      },
+                      "startup_cpu_boost": null
+                    }
+                  ],
+                  "sandbox_launcher": null,
+                  "volume_mounts": [],
+                  "working_dir": null
+                }
+              ],
+              "encryption_key": null,
+              "execution_environment": null,
+              "gpu_zonal_redundancy_disabled": null,
+              "health_check_disabled": null,
+              "labels": null,
+              "node_selector": [],
+              "revision": null,
+              "sandboxes": [],
+              "scaling": [
+                {
+                  "concurrency_utilization": null,
+                  "cpu_utilization": null,
+                  "max_instance_count": 2,
+                  "min_instance_count": 0
+                }
+              ],
+              "service_account": "drift-demo-web@drift-detective-2026.iam.gserviceaccount.com",
+              "session_affinity": null,
+              "volumes": [],
+              "vpc_access": [],
+              "workload_identity_config": []
+            }
+          ],
+          "terraform_labels": {
+            "app": "drift-detective",
+            "goog-terraform-provisioned": "true",
+            "managed-by": "terraform"
+          },
+          "timeouts": null
+        },
+        "after_unknown": {
+          "binary_authorization": [],
+          "build_config": [],
+          "conditions": true,
+          "create_time": true,
+          "creator": true,
+          "delete_time": true,
+          "effective_annotations": true,
+          "effective_labels": {},
+          "etag": true,
+          "expire_time": true,
+          "generation": true,
+          "id": true,
+          "labels": {},
+          "last_modifier": true,
+          "latest_created_revision": true,
+          "latest_ready_revision": true,
+          "launch_stage": true,
+          "multi_region_settings": [],
+          "observed_generation": true,
+          "reconciling": true,
+          "scaling": true,
+          "template": [
+            {
+              "containers": [
+                {
+                  "build_info": true,
+                  "env": [
+                    {
+                      "value_source": []
+                    },
+                    {
+                      "value": true,
+                      "value_source": []
+                    }
+                  ],
+                  "liveness_probe": [],
+                  "ports": true,
+                  "readiness_probe": [],
+                  "resources": [
+                    {
+                      "limits": {}
+                    }
+                  ],
+                  "startup_probe": true,
+                  "volume_mounts": []
+                }
+              ],
+              "max_instance_request_concurrency": true,
+              "node_selector": [],
+              "sandboxes": [],
+              "scaling": [
+                {}
+              ],
+              "timeout": true,
+              "volumes": [],
+              "vpc_access": [],
+              "workload_identity_config": []
+            }
+          ],
+          "terminal_condition": true,
+          "terraform_labels": {},
+          "traffic": true,
+          "traffic_statuses": true,
+          "uid": true,
+          "update_time": true,
+          "uri": true,
+          "urls": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {
+          "binary_authorization": [],
+          "build_config": [],
+          "conditions": [],
+          "effective_annotations": {},
+          "effective_labels": {},
+          "labels": {},
+          "multi_region_settings": [],
+          "scaling": [],
+          "template": [
+            {
+              "containers": [
+                {
+                  "build_info": [],
+                  "env": [
+                    {
+                      "value_source": []
+                    },
+                    {
+                      "value_source": []
+                    }
+                  ],
+                  "liveness_probe": [],
+                  "ports": [],
+                  "readiness_probe": [],
+                  "resources": [
+                    {
+                      "limits": {}
+                    }
+                  ],
+                  "startup_probe": [],
+                  "volume_mounts": []
+                }
+              ],
+              "node_selector": [],
+              "sandboxes": [],
+              "scaling": [
+                {}
+              ],
+              "volumes": [],
+              "vpc_access": [],
+              "workload_identity_config": []
+            }
+          ],
+          "terminal_condition": [],
+          "terraform_labels": {},
+          "traffic": [],
+          "traffic_statuses": [],
+          "urls": []
+        },
+        "after_identity": {
+          "location": null,
+          "name": null,
+          "project": null
+        }
+      }
+    },
+    {
+      "address": "google_cloud_run_v2_service_iam_binding.internal_invoker",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_service_iam_binding",
+      "name": "internal_invoker",
+      "provider_name": "registry.opentofu.org/hashicorp/google",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "condition": [],
+          "location": "us-central1",
+          "members": [
+            "serviceAccount:drift-demo-web@drift-detective-2026.iam.gserviceaccount.com"
+          ],
+          "name": "drift-demo-internal",
+          "role": "roles/run.invoker"
+        },
+        "after_unknown": {
+          "condition": [],
+          "etag": true,
+          "id": true,
+          "members": [
+            false
+          ],
+          "project": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {
+          "condition": [],
+          "members": [
+            false
+          ]
+        }
+      }
+    }
+  ]
+}
