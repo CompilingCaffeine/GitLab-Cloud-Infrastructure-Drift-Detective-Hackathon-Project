@@ -1,0 +1,51 @@
+# Phase 1 probe: proves a flow started from the API can read pipeline evidence
+# and write back to GitLab. Not part of the final workflow.
+version: "v1"
+environment: ambient
+coding_environment: none
+
+components:
+  - name: "probe"
+    type: AgentComponent
+    prompt_id: "probe_prompt"
+    inputs:
+      - "context:goal"
+      - from: "context:project_id"
+        as: "project_id"
+    toolset:
+      - "gitlab_api_get"
+      - "get_job_logs"
+      - "get_issue"
+      - "create_issue_note"
+
+prompts:
+  - prompt_id: "probe_prompt"
+    name: "Drift evidence probe"
+    unit_primitives: []
+    prompt_template:
+      system: |
+        You verify that pipeline evidence is reachable. Use only data returned by your tools.
+        Never invent values. If a tool call fails, report the exact error.
+      user: |
+        Project ID: {{project_id}}
+
+        Task:
+        {{goal}}
+
+        Steps:
+        1. Fetch the file with gitlab_api_get using endpoint
+           /api/v4/projects/{{project_id}}/jobs/<JOB_ID>/artifacts/evidence/drift-report.md
+           where <JOB_ID> is given in the task.
+        2. Post ONE comment on the issue given in the task with:
+           - "Evidence read: yes/no"
+           - the resource addresses and actions listed in the report (verbatim)
+           - any tool errors you hit, verbatim
+    params:
+      timeout: 180
+
+routers:
+  - from: "probe"
+    to: "end"
+
+flow:
+  entry_point: "probe"

@@ -172,13 +172,16 @@ detect-drift:
       code=$?
       set -e
       case "$code" in
-        0) drift=false ;;
-        2) drift=true ;;
+        0|2) ;;
         *) echo "Plan failed (exit $code); cannot determine drift." >&2; exit "$code" ;;
       esac
       gitlab-tofu show -json "$GITLAB_TOFU_ROOT_DIR/drift.cache" | scripts/summarize_plan.sh /dev/stdin evidence
-      echo "DRIFT_DETECTED=$drift" > drift.env
-      echo "Drift detected: $drift"
+      # OUT_OF_SYNC: live environment differs from main (exit 2).
+      # DRIFT_DETECTED: the difference includes changes made outside OpenTofu.
+      {
+        echo "OUT_OF_SYNC=$([ "$code" -eq 2 ] && echo true || echo false)"
+        echo "DRIFT_DETECTED=$(jq -r .drift_detected evidence/drift-report.json)"
+      } | tee drift.env
   artifacts:
     when: always
     expire_in: 30 days

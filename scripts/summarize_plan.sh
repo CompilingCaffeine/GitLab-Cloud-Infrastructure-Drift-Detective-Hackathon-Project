@@ -49,7 +49,10 @@ jq '
     drift: [ .resource_drift[]? | entry ],
     planned_changes: [ .resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"]) | entry ]
   }
-  | .drift_detected = ((.drift | length) > 0 or (.planned_changes | length) > 0)
+  # drift: someone changed real infrastructure outside OpenTofu.
+  # pending: the declared config differs from reality (drift to revert, or unapplied code).
+  | .drift_detected = ((.drift | length) > 0)
+  | .changes_pending = ((.planned_changes | length) > 0)
 ' "$plan" > "$out/drift-report.json"
 
 jq -r '
@@ -57,15 +60,16 @@ jq -r '
   def table(rows):
     if (rows | length) == 0 then "_None._\n"
     else
-      (rows[] |
+      [rows[] |
         "#### `\(.address)` (\(.actions | join(", ")))\n\n" +
         "| Attribute | Before | After |\n|---|---|---|\n" +
         ([.differences[] | "| `\(.attribute)` | `\(.before | fmt)` | `\(.after | fmt)` |"] | join("\n")) +
-        "\n")
+        "\n"] | join("\n")
     end;
 
   "## Drift report\n\n" +
-  "- **Drift detected:** \(.drift_detected)\n" +
+  "- **Out-of-band drift detected:** \(.drift_detected)\n" +
+  "- **Declared changes pending:** \(.changes_pending)\n" +
   "- **Pipeline:** \(.pipeline_url // "local")\n" +
   "- **Job:** \(.job_url // "local")\n" +
   "- **Commit:** `\(.commit_sha // "local")`\n\n" +
