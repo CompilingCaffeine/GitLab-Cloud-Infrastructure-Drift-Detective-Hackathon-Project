@@ -46,6 +46,11 @@ resource "google_cloud_run_v2_service" "web" {
       }
     }
   }
+
+  # gcloud and the console stamp these on every change; they carry no configuration.
+  lifecycle {
+    ignore_changes = [client, client_version]
+  }
 }
 
 # Internal API. Must require authentication; only the web service may call it.
@@ -81,6 +86,11 @@ resource "google_cloud_run_v2_service" "internal" {
         value = "internal"
       }
     }
+  }
+
+  # gcloud and the console stamp these on every change; they carry no configuration.
+  lifecycle {
+    ignore_changes = [client, client_version]
   }
 }
 
