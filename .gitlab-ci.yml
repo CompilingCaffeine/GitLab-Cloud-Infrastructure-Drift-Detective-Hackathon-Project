@@ -102,6 +102,10 @@ test:
 
 # ---------- secure ----------
 
+# The template's base job also needs a stage that exists here (it never runs itself).
+iac-sast:
+  stage: secure
+
 kics-iac-sast:
   stage: secure
   rules: !reference [.normal-rules, rules]
