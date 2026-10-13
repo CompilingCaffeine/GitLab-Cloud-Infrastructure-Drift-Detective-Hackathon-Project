@@ -40,6 +40,23 @@ expect_policy "policy: missing managed-by label fails" 1 \
   "$(variant label "$web then .values.labels |= del(.[\"managed-by\"]) else . end)")" "managed-by"
 expect_policy "policy: public web service is allowed" 0 "$fixture"
 
+# --- security_gate.sh ---
+report() { # name severity...
+  f="$work/$1.json"; shift
+  printf '%s\n' "$@" | jq -R 'select(length > 0) | {severity: ., name: "finding", location: {file: "x.tf", start_line: 1}}' \
+    | jq -s '{scan: {scanner: {name: "test"}}, vulnerabilities: .}' > "$f"
+  echo "$f"
+}
+expect_gate() { # name expected_exit report...
+  name=$1; want=$2; shift 2
+  out=$("$root/scripts/security_gate.sh" "$@" 2>&1); code=$?
+  [ "$code" -eq "$want" ] && pass "$name" || fail "$name (exit $code, want $want): $out"
+}
+expect_gate "gate: info and medium findings pass" 0 "$(report low Info Medium)" "$(report none)"
+expect_gate "gate: a high finding fails" 1 "$(report clean Info)" "$(report high High)"
+expect_gate "gate: a critical finding fails" 1 "$(report critical Critical)"
+expect_gate "gate: a missing report fails" 1 "$work/does-not-exist.json"
+
 # --- summarize_plan.sh ---
 drift_plan=$(variant drift '
   .resource_drift = [{

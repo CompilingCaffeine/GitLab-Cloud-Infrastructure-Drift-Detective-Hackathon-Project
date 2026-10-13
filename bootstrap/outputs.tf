@@ -21,13 +21,16 @@ output "apply_service_account" {
 }
 
 output "web_runtime_service_account" {
-  value = google_service_account.web_runtime.email
+  description = "Runtime identity of the public web service."
+  value       = google_service_account.web_runtime.email
 }
 
 output "internal_runtime_service_account" {
-  value = google_service_account.internal_runtime.email
+  description = "Runtime identity of the internal API."
+  value       = google_service_account.internal_runtime.email
 }
 
 output "project_number" {
-  value = data.google_project.this.number
+  description = "Google Cloud project number (part of GCP_WIF_PROVIDER)."
+  value       = data.google_project.this.number
 }

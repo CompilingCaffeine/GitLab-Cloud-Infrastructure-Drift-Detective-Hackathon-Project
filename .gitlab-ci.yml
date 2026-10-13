@@ -114,6 +114,19 @@ secret_detection:
   stage: secure
   rules: !reference [.normal-rules, rules]
 
+# The scanners are report-only; this job turns their reports into a gate.
+security-gate:
+  stage: secure
+  extends: .normal-rules
+  needs:
+    - job: kics-iac-sast
+      artifacts: true
+    - job: secret_detection
+      artifacts: true
+  cache: []
+  script:
+    - scripts/security_gate.sh gl-sast-report.json gl-secret-detection-report.json
+
 # ---------- plan ----------
 
 plan:
